@@ -1,6 +1,7 @@
 import Course from "../models/courses.js";
 import User from "../models/user.js";
 import { decryptEmail } from "../utils/emailHelper.js";
+import { getRedisCache, setRedisCache } from "../utils/redisHelper.js";
 
 class CourseService{
     async createCourse(courseData){

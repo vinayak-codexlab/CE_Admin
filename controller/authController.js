@@ -5,7 +5,7 @@ export const addUser = async(req,res,next)=>{
     try{
         const validatedData = registerSchema.parse(req.body);
         const creatorRole = req.user?.role;
-        const newUser = await authService.createUser(validatedData, creatorRole);
+        const newUser = await authService.addUser(validatedData, creatorRole);
         return res.status(201).json({success:true, message:"user data added"});
     } catch (err){
         next(err);
@@ -14,7 +14,7 @@ export const addUser = async(req,res,next)=>{
 export const login = async(req,res,next)=>{
     try{
         const validatedData = loginSchema.parse(req.body);
-        const {user,accessToken, refreshToken} = await authService.adminLogin(validatedData);
+        const {user,accessToken, refreshToken} = await authService.login(validatedData);
         //cookies...
         // const cookieOptions = {
         //     httpOnly : true,

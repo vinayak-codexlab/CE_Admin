@@ -2,10 +2,11 @@ import bcrypt from "bcrypt";
 import User from "../models/user.js";
 import { encryptEmail, decryptEmail, hashEmail } from "../utils/emailHelper.js";
 import jwt from "jsonwebtoken";
+import { getRedisCache, setRedisCache } from "../utils/redisHelper.js";
 const secret_key = process.env.JWT_SECRET;
 
 class AuthService {
-    async createUser(userData, creatorRole){
+    async addUser(userData, creatorRole){
         try{
             const {name, email, password, role, isActive} = userData;
             if (role === "admin" || role === "student") {
@@ -36,7 +37,7 @@ class AuthService {
             throw err;
         }
     }
-    async adminLogin ({email, password}){
+    async login ({email, password}){
         try{
             const emailHash = hashEmail(email);
             const user = await User.findOne({emailHash});
@@ -135,8 +136,14 @@ class AuthService {
             const limit = parseInt(queryOptions.limit) || 10;
             const search = queryOptions.search || "";
 
-            const filter = {};
+            //redis cache || get data retrieval from cache
+            const cacheKey = `users:list:role=${role || 'all'}:page=${page}:limit=${limit}:search=${search}`;
+            const cacheResult = await getRedisCache(cacheKey);
+            if(cacheResult){
+                return cacheResult;
+            }
 
+            const filter = {};
             if (role){
                 filter.role = role;
             }
@@ -162,7 +169,7 @@ class AuthService {
                 }
                 return user;
             });
-            return {
+            const result = {
                 pagination :{
                     totalItems : totalUsers,
                     currentPage : page,
@@ -171,6 +178,9 @@ class AuthService {
                 },
                 users:decryptedUser
             }
+            //set the data in redis cache
+            await setRedisCache(cacheKey, result, 300);
+            return result;
         } catch (err){
             err.statusCode = err.statusCode || 500;
             err.message = err.message || "failed to get users.";
