@@ -90,7 +90,7 @@ export const handleTokenRefresh = async (req, res, next) => {
         next(err);
     }
 };
-export const getUserData = async (req,res,next)=>{
+export const getDataById = async (req,res,next)=>{
     try{
         const userId = req.params.id || req.user?.id;
         if (!userId) {
@@ -114,7 +114,7 @@ export const listUsers = async (req,res,next)=>{
         next(err);
     }
 };
-export const removeUser = async (req,res,next)=>{
+export const deleteUserById = async (req,res,next)=>{
     try{
         const { id } = req.params;
         const result = await authService.deleteUserById(id);

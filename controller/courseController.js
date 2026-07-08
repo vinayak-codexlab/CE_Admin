@@ -49,7 +49,8 @@ export const deleteCourse = async(req,res,next)=>{
 };
 export const adminAssignTeacher = async (req, res, next) => {
     try {
-        const { courseId, teacherId } = req.params;
+        const { courseId } = req.params;
+        const { teacherId } = req.body;
         // if (!teacherId) {
         //     return res.status(400).json({ success: false, message: "teacherId is required in request body." });
         // }
@@ -65,7 +66,8 @@ export const adminAssignTeacher = async (req, res, next) => {
 };
 export const adminRemoveTeacher = async (req, res, next) => {
     try {
-        const { courseId, teacherId } = req.params;
+        const { courseId } = req.params;
+        const { teacherId } = req.body;
 
         const result = await courseService.removeTeacherFromCourse(courseId, teacherId);
 

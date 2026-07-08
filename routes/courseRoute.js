@@ -15,7 +15,7 @@ router.route("/:id")
     .get(getCourseById)
     .patch(updateCourse)
     .delete(deleteCourse);
-router.route("/:courseId/:teacherId")
+router.route("/assign/:courseId")
     .patch(adminAssignTeacher)
     .delete(adminRemoveTeacher);
 

@@ -31,7 +31,7 @@ class CourseService{
     async getCourses(queryOptions = {}){
         try{
             const page = parseInt(queryOptions.page) || 1;
-            const limit = parseInt(queryOptions.limit) || 2;
+            const limit = parseInt(queryOptions.limit) || 10;
             const search = queryOptions.search || "";
 
             //redis
@@ -44,10 +44,19 @@ class CourseService{
             let filter = {};
             if (search) {
                 const searchRegex = { $regex: search, $options: "i" };
+                const matchingTeachers = await User.find({
+                    $or: [
+                        { name: searchRegex },
+                        { email: searchRegex }
+                    ]
+                }).select("_id").lean();
+                const teacherIds = matchingTeachers.map(t => t._id);
+
                 filter.$or = [
                     { title: searchRegex },
                     { description: searchRegex },
-                    { level: searchRegex }
+                    { level: searchRegex },
+                    { teacherId: { $in: teacherIds } }
                 ];
             }
 
@@ -142,7 +151,7 @@ class CourseService{
                 throw err;
             }
             //remove from the profile and list
-            await removeRedisCache(`course:profile:${id}`);
+            await removeRedisCache(`courses:profile:${id}`);
             await removeRedisCachePattern("courses:list:*");
             return updatedCourse;
         } catch (err){
@@ -160,7 +169,7 @@ class CourseService{
                 throw err;
             }
             //remove profile and list cache
-            await removeRedisCache(`course:profile:${id}`);
+            await removeRedisCache(`courses:profile:${id}`);
             await removeRedisCachePattern("courses:list:*");
 
             return courseData;
@@ -203,7 +212,7 @@ class CourseService{
                 throw err;
             }
 
-            await removeRedisCache(`course:profile:${courseId}`);
+            await removeRedisCache(`courses:profile:${courseId}`);
             await removeRedisCachePattern("courses:list:*");
 
             return updatedCourse;
@@ -215,6 +224,19 @@ class CourseService{
     }
     async removeTeacherFromCourse(courseId, teacherId) {
         try {
+            const course = await Course.findById(courseId);
+            if(!course){
+                const err = new Error("Course not found !");
+                err.statusCode = 404;
+                throw err;
+            };
+            const isTeacherAssigned = course.teacherId.some(id => id.toString() === teacherId.toString());
+            if (!isTeacherAssigned) {
+                const err = new Error("Teacher is not assigned to this course!");
+                err.statusCode = 400; 
+                throw err;
+            }
+
             const updatedCourse = await Course.findByIdAndUpdate(
                 courseId,
                 { $pull: { teacherId: teacherId } }, // Removes the specific ID from the array
@@ -229,7 +251,7 @@ class CourseService{
                 throw err;
             }
 
-            await removeRedisCache(`course:profile:${courseId}`);
+            await removeRedisCache(`courses:profile:${courseId}`);
             await removeRedisCachePattern("courses:list:*");
             return updatedCourse;
         } catch (err) {

@@ -18,7 +18,12 @@ export const courseSchema = z.object({
     title: z.string().min(2,"Title's name is too small !").trim(),
     description: z.string().min(7,"description data is short !"),
     price: z.number().min(0, "price can not be negative !").default(0),
-    duration: z.string().default("0"),
+    // duration: z.string().default("0"),
+    duration: z 
+        .number({required_error:"Duration is required!"})
+        .min(0, "duration can not be in negative!")
+        .transform((val)=>`${val} hours`)
+        .default(0),
     level: z.enum(["beginner", "intermediate", "advanced"]).default("beginner"),
     status: z.enum(["draft", "published", "archived"]).default("published"),
 });
