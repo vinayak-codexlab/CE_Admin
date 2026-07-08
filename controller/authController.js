@@ -127,7 +127,7 @@ export const adminUpdateUserStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { isActive, role } = req.body; 
-        const updatedUser = await userService.updateUserStatusAndRole(id, { isActive, role });
+        const updatedUser = await authService.updateUserStatusAndRole(id, { isActive, role });
         return res.status(200).json({
             success: true,
             message: "User status/role updated successfully.",

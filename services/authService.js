@@ -2,7 +2,8 @@ import bcrypt from "bcrypt";
 import User from "../models/user.js";
 import { encryptEmail, decryptEmail, hashEmail } from "../utils/emailHelper.js";
 import jwt from "jsonwebtoken";
-import { getRedisCache, setRedisCache } from "../utils/redisHelper.js";
+import { getRedisCache, setRedisCache, removeRedisCache, removeRedisCachePattern } from "../utils/redisHelper.js";
+import { email } from "zod";
 const secret_key = process.env.JWT_SECRET;
 
 class AuthService {
@@ -23,7 +24,15 @@ class AuthService {
                 throw err;
             }
             const hashPassword = await bcrypt.hash(password, 10);
-            return await User.create({
+            // return await User.create({
+            //     name,
+            //     emailHash:emailHash,
+            //     email:encryptedEmail,
+            //     password:hashPassword,
+            //     role,
+            //     isActive
+            // });
+            const result = await User.create({
                 name,
                 emailHash:emailHash,
                 email:encryptedEmail,
@@ -31,6 +40,8 @@ class AuthService {
                 role,
                 isActive
             });
+            await removeRedisCachePattern("users:list:*");
+            return result;
         } catch(err){
             err.statusCode = err.statusCode || 500;
             err.message = err.message || "unable to add the user";
@@ -94,15 +105,27 @@ class AuthService {
     };
     async getDataById(id){
         try{
+            //redis 
+            const cacheKey = `user:profile:${id}`;
+            const cachedUser = await getRedisCache(cacheKey);
+            if(cachedUser){
+                return cachedUser;
+            }
             const user = await User.findById(id).select("-emailHash -password").lean();
+            // console.log(user);
             if(!user){
                 const err = new Error("Data not found !");
                 err.statusCode = 404;
                 throw err;
             }
-            return {
+            // return {
+            //     ...user, email:decryptEmail(user.email)
+            // };
+            const result = {
                 ...user, email:decryptEmail(user.email)
-            };
+            }
+            await setRedisCache(cacheKey, result, 3600);
+            return result;
         } catch(err){
             err.statusCode = err.statusCode || 500;
             err.message = err.message || "failed to get data";
@@ -123,6 +146,7 @@ class AuthService {
                 throw err;
             }
             await User.findByIdAndDelete(id);
+            await removeRedisCache(`user:profile:${id}`);
             return user;
         } catch(err){
             err.statusCode = err.statusCode || 500;
@@ -204,6 +228,8 @@ class AuthService {
             if (isActive !== undefined) user.isActive = isActive;
             if (role !== undefined) user.role = role;
             await user.save();
+
+            await removeRedisCache(`user:profile:${userId}`);
             return user;
         } catch (err) {
             err.statusCode = err.statusCode || 500;

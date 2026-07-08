@@ -32,5 +32,28 @@ const getRedisCache = async(key)=>{
         return null;
     }
 }
+const removeRedisCache = async(key)=>{
+    try{
+        await redisClient.del(key);
+    } catch(err){
+        console.log("Error in the deleting cache data !", err);
+        return null;
+    }
+};
+const removeRedisCachePattern = async(pattern)=>{
+    try{
+        let cursor = "0";
+        do{
+            const reply = await redisClient.scan(cursor, {MATCH:pattern, COUNT:100});
+            cursor = reply.cursor;
+            const keys = reply.keys;
+            if(keys.length>0){
+                await redisClient.del(keys);
+            }
+        } while (cursor != "0");
+    } catch(err){
+        console.log("Error in deleting the pattern !",err);
+    }
+};
 
-export { setRedisCache, getRedisCache};
+export { setRedisCache, getRedisCache, removeRedisCache, removeRedisCachePattern };

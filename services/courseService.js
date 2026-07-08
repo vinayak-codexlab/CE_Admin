@@ -1,7 +1,7 @@
 import Course from "../models/courses.js";
 import User from "../models/user.js";
 import { decryptEmail } from "../utils/emailHelper.js";
-import { getRedisCache, setRedisCache } from "../utils/redisHelper.js";
+import { getRedisCache, setRedisCache, removeRedisCache, removeRedisCachePattern } from "../utils/redisHelper.js";
 
 class CourseService{
     async createCourse(courseData){
@@ -20,6 +20,7 @@ class CourseService{
             //     throw err;
             // }
             const newCourse = await Course.create({...courseData});
+            await removeRedisCachePattern("courses:list:*");
             return newCourse;
         } catch(err){
             err.statusCode = err.statusCode || 500;
@@ -32,6 +33,13 @@ class CourseService{
             const page = parseInt(queryOptions.page) || 1;
             const limit = parseInt(queryOptions.limit) || 2;
             const search = queryOptions.search || "";
+
+            //redis
+            const cacheKey = `courses:list:page=${page}:limit=${limit}:search=${search}`;
+            const cacheResult = await getRedisCache(cacheKey);
+            if (cacheResult) {
+                return cacheResult;
+            }
 
             let filter = {};
             if (search) {
@@ -65,7 +73,7 @@ class CourseService{
                 }
                 return c;
             });
-            return {
+            const result = {
                 pagination: {
                     totalItem: totalCourses,
                     currentPage: page,
@@ -74,6 +82,8 @@ class CourseService{
                 },
                 courses:decryptedCourse
             };
+            await setRedisCache(cacheKey, result, 300);
+            return result;
         } catch (err){
             err.statusCode = err.statusCode || 500;
             err.message = err.message || "failed to get courses data !";
@@ -82,6 +92,11 @@ class CourseService{
     }
     async getCourseById(id){
         try{
+            const cacheKey = `courses:profile:${id}`;
+            const cachedCourse = await getRedisCache(cacheKey);
+            if (cachedCourse) {
+                return cachedCourse;
+            }
             const course = await Course.findById(id).populate("teacherId", "name email");
             if (!course) {
                 const err = new Error("Course not found!");
@@ -99,6 +114,7 @@ class CourseService{
                     }
                 });
             }
+            await setRedisCache(cacheKey, courseObj, 3600);
             return courseObj;
         } catch (err){
             err.statusCode = err.statusCode || 500;
@@ -125,6 +141,9 @@ class CourseService{
                 err.statusCode = 404;
                 throw err;
             }
+            //remove from the profile and list
+            await removeRedisCache(`course:profile:${id}`);
+            await removeRedisCachePattern("courses:list:*");
             return updatedCourse;
         } catch (err){
             err.statusCode = err.statusCode || 500;
@@ -140,6 +159,10 @@ class CourseService{
                 err.statusCode = 404;
                 throw err;
             }
+            //remove profile and list cache
+            await removeRedisCache(`course:profile:${id}`);
+            await removeRedisCachePattern("courses:list:*");
+
             return courseData;
         } catch(err){
             err.statusCode= err.statusCode || 500;
@@ -179,6 +202,10 @@ class CourseService{
                 err.statusCode = 404;
                 throw err;
             }
+
+            await removeRedisCache(`course:profile:${courseId}`);
+            await removeRedisCachePattern("courses:list:*");
+
             return updatedCourse;
         } catch (err) {
             err.statusCode = err.statusCode || 500;
@@ -201,6 +228,9 @@ class CourseService{
                 err.statusCode = 404;
                 throw err;
             }
+
+            await removeRedisCache(`course:profile:${courseId}`);
+            await removeRedisCachePattern("courses:list:*");
             return updatedCourse;
         } catch (err) {
             err.statusCode = err.statusCode || 500;
