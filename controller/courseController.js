@@ -4,7 +4,7 @@ import { courseService } from "../services/courseService.js";
 export const addCourse = async (req,res,next)=>{
     try{
         const validatedData = courseSchema.parse(req.body);
-        const result = await courseService.createCourse(validatedData);
+        const result = await courseService.addCourse(validatedData);
         return res.status(201).json({success:true,message:"Course added successfully."});
     } catch(err){
         next(err);
@@ -54,7 +54,7 @@ export const adminAssignTeacher = async (req, res, next) => {
         // if (!teacherId) {
         //     return res.status(400).json({ success: false, message: "teacherId is required in request body." });
         // }
-        const result = await courseService.assignTeacherToCourse(courseId, teacherId);
+        const result = await courseService.adminAssignTeacher(courseId, teacherId);
         return res.status(200).json({
             success: true,
             message: "Teacher assigned to course successfully.",
@@ -69,7 +69,7 @@ export const adminRemoveTeacher = async (req, res, next) => {
         const { courseId } = req.params;
         const { teacherId } = req.body;
 
-        const result = await courseService.removeTeacherFromCourse(courseId, teacherId);
+        const result = await courseService.adminRemoveTeacher(courseId, teacherId);
 
         return res.status(200).json({
             success: true,

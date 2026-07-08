@@ -15,21 +15,8 @@ export const login = async(req,res,next)=>{
     try{
         const validatedData = loginSchema.parse(req.body);
         const {user,accessToken, refreshToken} = await authService.login(validatedData);
-        //cookies...
-        // const cookieOptions = {
-        //     httpOnly : true,
-        //     secure : false,
-        //     sameSite: "strict",
-        //     maxAge: 15*60*1000
-        // }
 
-        // return res.status(200)
-        //     .cookie("token", token, cookieOptions)
-        //     .json({success:true, message:"logged in successfully.", user});
-        // return res.status(200)
-        //     .json({ success: true, message: "Logged in successfully.", user });
-
-        //new logic...
+        //new cookies logic...
         const cookieOptions = {
             httpOnly: true,
             secure: false,
@@ -49,8 +36,6 @@ export const login = async(req,res,next)=>{
                 message: "Logged in successfully.", 
                 user 
             });
-        // res.locals.accessToken = accessToken;
-        // res.locals.refreshToken = refreshToken;
     } catch (err){
         next(err);
     }
@@ -65,15 +50,13 @@ export const logout = async (req, res) => {
         .status(200)
         .clearCookie("accessToken", cookieOptions)
         .clearCookie("refreshToken", cookieOptions)
-        // .clearCookie("token", { httpOnly: true, sameSite: "strict" })
         .json({ success: true, message: "Logged out successfully" });
 };
 export const handleTokenRefresh = async (req, res, next) => {
     try {
         const currentRefreshToken = req.cookies.refreshToken;
-        const { newAccessToken } = await authService.refreshService(currentRefreshToken);        
-        // res.locals.accessToken = newAccessToken;
-        // next();
+        const { newAccessToken } = await authService.handleTokenRefresh(currentRefreshToken);        
+        
         const cookieOptions = {
             httpOnly: true,
             secure:false,
@@ -107,7 +90,7 @@ export const getDataById = async (req,res,next)=>{
 export const listUsers = async (req,res,next)=>{
     try{
         const {page, limit, search, role} = req.query;
-        const usersData = await authService.getUsers(role, {page, limit, search});
+        const usersData = await authService.listUsers(role, {page, limit, search});
         res.status(200).json({success:true, pagination : usersData.pagination,data : usersData.users});
     } catch(err){
         console.log("Error in the listUser controller", err);
@@ -127,7 +110,7 @@ export const adminUpdateUserStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { isActive, role } = req.body; 
-        const updatedUser = await authService.updateUserStatusAndRole(id, { isActive, role });
+        const updatedUser = await authService.adminUpdateUserStatus(id, { isActive, role });
         return res.status(200).json({
             success: true,
             message: "User status/role updated successfully.",

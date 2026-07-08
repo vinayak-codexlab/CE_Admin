@@ -86,7 +86,7 @@ class AuthService {
             throw err;
         }
     }   
-    async refreshService(refreshToken){
+    async handleTokenRefresh(refreshToken){
         if (!refreshToken) {
             throw new Error("REFRESH_TOKEN_MISSING");
         }
@@ -154,7 +154,7 @@ class AuthService {
             throw err;
         }
     }
-    async getUsers(role, queryOptions = {}) {
+    async listUsers(role, queryOptions = {}) {
         try{
             const page = parseInt(queryOptions.page) || 1;
             const limit = parseInt(queryOptions.limit) || 10;
@@ -211,7 +211,7 @@ class AuthService {
             throw err;
         };
     }
-    async updateUserStatusAndRole(userId, updateData) {
+    async adminUpdateUserStatus(userId, updateData) {
         try {
             const { isActive, role } = updateData;
             const user = await User.findById(userId);

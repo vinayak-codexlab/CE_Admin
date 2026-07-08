@@ -4,7 +4,7 @@ import { decryptEmail } from "../utils/emailHelper.js";
 import { getRedisCache, setRedisCache, removeRedisCache, removeRedisCachePattern } from "../utils/redisHelper.js";
 
 class CourseService{
-    async createCourse(courseData){
+    async addCourse(courseData){
         try{
             const { title, teacherId } = courseData;
             const existCourse = await Course.findOne({title});
@@ -142,7 +142,8 @@ class CourseService{
                 }
             }
             const updatedCourse = await Course.findByIdAndUpdate(id, updateData, { 
-                new: true, 
+                // new: true, 
+                returnDocument:"after",
                 runValidators: true 
             });
             if (!updatedCourse) {
@@ -179,7 +180,7 @@ class CourseService{
             throw err;
         }
     }
-    async assignTeacherToCourse(courseId, teacherId) {
+    async adminAssignTeacher(courseId, teacherId) {
         try {
             const teacher = await User.findById(teacherId);
             if (!teacher || teacher.role !== "teacher") {
@@ -222,7 +223,7 @@ class CourseService{
             throw err;
         }
     }
-    async removeTeacherFromCourse(courseId, teacherId) {
+    async adminRemoveTeacher(courseId, teacherId) {
         try {
             const course = await Course.findById(courseId);
             if(!course){
