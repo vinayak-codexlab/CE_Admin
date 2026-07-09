@@ -40,5 +40,13 @@ export const hashEmail = (text)=>{
     if (!text) return text;
     return crypto.createHash("sha256").update(text.toLowerCase().trim()).digest("hex");
 };
+export const generateSearchHash = (text)=>{
+    if(!text) return text;
+    return crypto.createHmac("sha256",process.env.BLIND_INDEXING_SECRET).update(text.toLowerCase().trim()).digest("hex");
+};
+export const tokenizeField = (value)=>{
+    if (!value) return [];
+    return value.toLowerCase().split(/[\s@.-]+/).filter(token => token.length>1);
+};
 
-export default {encryptEmail, decryptEmail, hashEmail};
+export default {encryptEmail, decryptEmail, hashEmail, generateSearchHash, tokenizeField};

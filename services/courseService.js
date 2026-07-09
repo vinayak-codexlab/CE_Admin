@@ -1,12 +1,12 @@
 import Course from "../models/courses.js";
 import User from "../models/user.js";
-import { decryptEmail } from "../utils/emailHelper.js";
+import { decryptEmail, generateSearchHash, hashEmail, tokenizeField } from "../utils/emailHelper.js";
 import { getRedisCache, setRedisCache, removeRedisCache, removeRedisCachePattern } from "../utils/redisHelper.js";
 
 class CourseService{
     async addCourse(courseData){
         try{
-            const { title, teacherId } = courseData;
+            const { title } = courseData;
             const existCourse = await Course.findOne({title});
             if(existCourse){
                 const err = new Error("Course already exists !");
@@ -42,16 +42,27 @@ class CourseService{
             }
 
             let filter = {};
-            if (search) {
-                const searchRegex = { $regex: search, $options: "i" };
-                const matchingTeachers = await User.find({
-                    $or: [
-                        { name: searchRegex },
-                        { email: searchRegex }
-                    ]
-                }).select("_id").lean();
-                const teacherIds = matchingTeachers.map(t => t._id);
+            // if (search) {
+            //     const searchRegex = { $regex: search, $options: "i" };
+            //     const hashedSearch = hashEmail(search);
+            //     const matchingTeachers = await User.find({
+            //         $or: [
+            //             { name: searchRegex },
+            //             { emailHash: hashedSearch }
+            //         ]
+            //     }).select("_id").lean();
+            if(search){
+                const searchTokenInput = tokenizeField(search);
+                let matchingTeachers = [];
+                if(searchTokenInput.length > 0){
+                    const hashedSearchToken = searchTokenInput.map(token=>generateSearchHash(token));
+                    matchingTeachers = await User.find({
+                        searchToken : {$in : hashedSearchToken}
+                    }).select("_id").lean();
+                }
 
+                const teacherIds = matchingTeachers.map(t => t._id);
+                const searchRegex = { $regex: search, $options: "i" };
                 filter.$or = [
                     { title: searchRegex },
                     { description: searchRegex },
@@ -68,20 +79,23 @@ class CourseService{
                     .limit(limit)
                     .skip(skipValues)
                     .sort({ createdAt: -1 })
-                    .populate("teacherId", "name email")
-                    .lean(),
+                    .populate("teacherId", "name email"),
                 Course.countDocuments(filter)
             ]);
-            const decryptedCourse = courses.map(c=>{
-                if (c && c.teacherId && Array.isArray(c.teacherId)) {
-                    c.teacherId.forEach(teacher => {
-                        if (teacher && teacher.email) {
-                            teacher.email = decryptEmail(teacher.email);
-                        }
-                    });
-                }
-                return c;
-            });
+
+            //optional 
+            const serializedCourses = courses.map(course => course.toJSON());
+
+            // const decryptedCourse = courses.map(c=>{
+            //     if (c && c.teacherId && Array.isArray(c.teacherId)) {
+            //         c.teacherId.forEach(teacher => {
+            //             if (teacher && teacher.email) {
+            //                 teacher.email = decryptEmail(teacher.email);
+            //             }
+            //         });
+            //     }
+            //     return c;
+            // });
             const result = {
                 pagination: {
                     totalItem: totalCourses,
@@ -89,7 +103,8 @@ class CourseService{
                     totalPages: Math.ceil(totalCourses / limit),
                     ItemsPerPage: limit
                 },
-                courses:decryptedCourse
+                // courses:courses
+                courses:serializedCourses
             };
             await setRedisCache(cacheKey, result, 300);
             return result;
@@ -115,16 +130,17 @@ class CourseService{
             // if (course.teacherId && course.teacherId.email) {
             //     course.teacherId.email = decryptEmail(course.teacherId.email);
             // }
-            const courseObj = course.toObject();
-            if (courseObj.teacherId && Array.isArray(courseObj.teacherId)) {
-                courseObj.teacherId.forEach(teacher => {
-                    if (teacher && teacher.email) {
-                        teacher.email = decryptEmail(teacher.email);
-                    }
-                });
-            }
-            await setRedisCache(cacheKey, courseObj, 3600);
-            return courseObj;
+            // const courseObj = course.toObject();
+            // if (courseObj.teacherId && Array.isArray(courseObj.teacherId)) {
+            //     courseObj.teacherId.forEach(teacher => {
+            //         if (teacher && teacher.email) {
+            //             // teacher.email = decryptEmail(teacher.email);
+            //             teacher.email = teacher.email;
+            //         }
+            //     });
+            // }
+            await setRedisCache(cacheKey, course, 3600);
+            return course;
         } catch (err){
             err.statusCode = err.statusCode || 500;
             err.message = err.message || "failed to get a course data!";

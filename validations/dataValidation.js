@@ -21,9 +21,10 @@ export const courseSchema = z.object({
     // duration: z.string().default("0"),
     duration: z 
         .number({required_error:"Duration is required!"})
-        .min(0, "duration can not be in negative!")
-        .transform((val)=>`${val} hours`)
+        .min(1, "duration can not be in negative or 0!")
+        // .transform((val)=>`${val} hours`)
         .default(0),
+    duration_type: z.enum(["mins","hours","days"]).default("hours"),
     level: z.enum(["beginner", "intermediate", "advanced"]).default("beginner"),
     status: z.enum(["draft", "published", "archived"]).default("published"),
 });

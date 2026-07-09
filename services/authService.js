@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import User from "../models/user.js";
-import { encryptEmail, decryptEmail, hashEmail } from "../utils/emailHelper.js";
+import { hashEmail } from "../utils/emailHelper.js";
 import jwt from "jsonwebtoken";
 import { getRedisCache, setRedisCache, removeRedisCache, removeRedisCachePattern } from "../utils/redisHelper.js";
 import { email } from "zod";
@@ -16,7 +16,7 @@ class AuthService {
                 throw err;
             }
             const emailHash = hashEmail(email);
-            const encryptedEmail = encryptEmail(email);
+            // const encryptedEmail = encryptEmail(email);
             const user = await User.findOne({emailHash});
             if(user){
                 const err = new Error("User already exist");
@@ -35,11 +35,13 @@ class AuthService {
             const result = await User.create({
                 name,
                 emailHash:emailHash,
-                email:encryptedEmail,
+                // email:encryptedEmail,
+                email,
                 password:hashPassword,
                 role,
                 isActive
             });
+            // console.log(result);
             await removeRedisCachePattern("users:list:*");
             return result;
         } catch(err){
@@ -68,7 +70,8 @@ class AuthService {
                 err.statusCode = 401;
                 throw err;
             }
-            const decryptedEmail = decryptEmail(user.email);
+            // const decryptedEmail = decryptEmail(user.email);
+            const decryptedEmail = user.email;
             const accessToken = jwt.sign(
                 { id: user._id, email: decryptedEmail, role: user.role }, 
                 secret_key,
@@ -111,7 +114,7 @@ class AuthService {
             if(cachedUser){
                 return cachedUser;
             }
-            const user = await User.findById(id).select("-emailHash -password").lean();
+            const user = await User.findById(id).select("-emailHash -password");
             // console.log(user);
             if(!user){
                 const err = new Error("Data not found !");
@@ -122,7 +125,8 @@ class AuthService {
             //     ...user, email:decryptEmail(user.email)
             // };
             const result = {
-                ...user, email:decryptEmail(user.email)
+                // ...user, email:decryptEmail(user.email)
+                user
             }
             await setRedisCache(cacheKey, result, 3600);
             return result;
@@ -173,9 +177,10 @@ class AuthService {
             }
             if (search){
                 const searchRegex = { $regex : search, $options: "i"};
+                const hashedSearch = hashEmail(search);
                 filter.$or = [
                     { name : searchRegex},
-                    { email : searchRegex}
+                    { emailHash : hashedSearch}
                 ];
             }
             const skipValue = (page - 1) * limit;
@@ -187,12 +192,12 @@ class AuthService {
                     .sort({createdAt : -1}),
                 User.countDocuments(filter)
             ]);
-            const decryptedUser = users.map(user=>{
-                if(user){
-                    user.email = decryptEmail(user.email);
-                }
-                return user;
-            });
+            // const decryptedUser = users.map(user=>{
+            //     if(user){
+            //         user.email = decryptEmail(user.email);
+            //     }
+            //     return user;
+            // });
             const result = {
                 pagination :{
                     totalItems : totalUsers,
@@ -200,7 +205,7 @@ class AuthService {
                     totalPage : Math.ceil(totalUsers/limit),
                     itemPerPage : limit
                 },
-                users:decryptedUser
+                users:users
             }
             //set the data in redis cache
             await setRedisCache(cacheKey, result, 300);
