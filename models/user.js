@@ -18,32 +18,32 @@ const userSchema = new mongoose.Schema({
         default:"student",
     },
     isActive : {type : Boolean, default : true},
-    searchToken:{
-        type: [String],
-        index: true
-    }
+    // searchToken:{
+    //     type: [String],
+    //     index: true
+    // }
 }, {
     timestamps : true,
     toJSON : {getters :true},
     toObject: {getters : true}
 });
 
-//auto saving the searchtoken before saving the user document
-userSchema.pre("save",function(next){
-    // 1. Get the plain name
-    const plainName = this.get("name") || "";
+// //auto saving the searchtoken before saving the user document
+// userSchema.pre("save",function(next){
+//     // 1. Get the plain name
+//     const plainName = this.get("name") || "";
     
-    // 2. Safely get the plain email. If it's already encrypted, decrypt it for token generation
-    const rawEmail = this.get("email") || "";
-    const plainEmail = rawEmail.includes("@") ? rawEmail : decryptEmail(rawEmail);
+//     // 2. Safely get the plain email. If it's already encrypted, decrypt it for token generation
+//     const rawEmail = this.get("email") || "";
+//     const plainEmail = rawEmail.includes("@") ? rawEmail : decryptEmail(rawEmail);
 
-    const tokens = [
-        ...tokenizeField(plainName),
-        ...tokenizeField(plainEmail)
-    ];
-    this.searchToken = [...new Set(tokens)].map(token=>generateSearchHash(token));
-    next();
-});
+//     const tokens = [
+//         ...tokenizeField(plainName),
+//         ...tokenizeField(plainEmail)
+//     ];
+//     this.searchToken = [...new Set(tokens)].map(token=>generateSearchHash(token));
+//     next();
+// });
 
 const User = mongoose.model("User",userSchema);
 export default User;

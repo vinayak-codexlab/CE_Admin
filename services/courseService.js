@@ -2,6 +2,7 @@ import Course from "../models/courses.js";
 import User from "../models/user.js";
 import { decryptEmail, generateSearchHash, hashEmail, tokenizeField } from "../utils/emailHelper.js";
 import { getRedisCache, setRedisCache, removeRedisCache, removeRedisCachePattern } from "../utils/redisHelper.js";
+import mongoose from "mongoose";
 
 class CourseService{
     async addCourse(courseData){
@@ -28,41 +29,39 @@ class CourseService{
             throw err;
         }
     }
-    async getCourses(queryOptions = {}){
-        try{
+    async getCourses(queryOptions = {}) {
+        try {
             const page = parseInt(queryOptions.page) || 1;
             const limit = parseInt(queryOptions.limit) || 10;
             const search = queryOptions.search || "";
 
-            //redis
+            // 1. Check Redis Cache
             const cacheKey = `courses:list:page=${page}:limit=${limit}:search=${search}`;
             const cacheResult = await getRedisCache(cacheKey);
+            
             if (cacheResult) {
                 return cacheResult;
             }
 
+            // 2. Build Query Filters
             let filter = {};
-            // if (search) {
-            //     const searchRegex = { $regex: search, $options: "i" };
-            //     const hashedSearch = hashEmail(search);
-            //     const matchingTeachers = await User.find({
-            //         $or: [
-            //             { name: searchRegex },
-            //             { emailHash: hashedSearch }
-            //         ]
-            //     }).select("_id").lean();
-            if(search){
-                const searchTokenInput = tokenizeField(search);
-                let matchingTeachers = [];
-                if(searchTokenInput.length > 0){
-                    const hashedSearchToken = searchTokenInput.map(token=>generateSearchHash(token));
-                    matchingTeachers = await User.find({
-                        searchToken : {$in : hashedSearchToken}
-                    }).select("_id").lean();
-                }
+            let teacherIds = [];
 
-                const teacherIds = matchingTeachers.map(t => t._id);
+            if (search) {
                 const searchRegex = { $regex: search, $options: "i" };
+                const hashedSearch = hashEmail(search);
+
+                // Find teachers matching the search criteria
+                const matchingTeachers = await User.find({
+                    $or: [
+                        { name: searchRegex },
+                        { emailHash: hashedSearch }
+                    ]
+                }).select("_id").lean();
+
+                teacherIds = matchingTeachers.map(t => t._id);
+
+                // Apply search filters to courses
                 filter.$or = [
                     { title: searchRegex },
                     { description: searchRegex },
@@ -71,6 +70,7 @@ class CourseService{
                 ];
             }
 
+            // 3. Pagination and Database Fetch
             const skipValues = (page - 1) * limit;
 
             const [courses, totalCourses] = await Promise.all([
@@ -83,19 +83,7 @@ class CourseService{
                 Course.countDocuments(filter)
             ]);
 
-            //optional 
-            const serializedCourses = courses.map(course => course.toJSON());
-
-            // const decryptedCourse = courses.map(c=>{
-            //     if (c && c.teacherId && Array.isArray(c.teacherId)) {
-            //         c.teacherId.forEach(teacher => {
-            //             if (teacher && teacher.email) {
-            //                 teacher.email = decryptEmail(teacher.email);
-            //             }
-            //         });
-            //     }
-            //     return c;
-            // });
+            // 4. Formulate Result & Cache It
             const result = {
                 pagination: {
                     totalItem: totalCourses,
@@ -103,14 +91,140 @@ class CourseService{
                     totalPages: Math.ceil(totalCourses / limit),
                     ItemsPerPage: limit
                 },
-                // courses:courses
-                courses:serializedCourses
+                courses: courses
             };
+
+            await setRedisCache(cacheKey, result, 300);
+            
+            return result;
+
+        } catch (err) {
+            err.statusCode = err.statusCode || 500;
+            err.message = err.message || "Failed to get courses data!";
+            throw err;
+        }
+    }
+
+    //second method
+    async getAllCourses(queryOptions = {}) {
+        try {
+            const page = parseInt(queryOptions.page) || 1;
+            const limit = parseInt(queryOptions.limit) || 10;
+            const search = queryOptions.search || "";
+            const skipValues = (page - 1) * limit;
+
+            // 1. Cache implementation
+            const cacheKey = `courses:list:page=${page}:limit=${limit}:search=${search}`;
+            const cacheResult = await getRedisCache(cacheKey);
+            if (cacheResult) return cacheResult;
+
+            // FIX: You must declare the pipeline array first!
+            const pipeline = [];
+
+            // 2. Add Atlas Search Stage if search term exists
+            if (search) {
+                // Find plain-text matching teacher IDs first
+                const matchingTeachers = await mongoose.model("User").find({
+                    name: { $regex: search, $options: "i" }
+                }).select("_id").lean();
+                
+                const teacherIds = matchingTeachers.map(t => t._id);
+
+                // Dynamically build an "equals" clause for every matching teacher ID found
+                const teacherSearchClauses = teacherIds.map(id => ({
+                    equals: {
+                        value: id,
+                        path: "teacherId"
+                    }
+                }));
+
+                pipeline.push({
+                    $search: {
+                        index: "default",
+                        compound: {
+                            should: [
+                                {
+                                    text: {
+                                        query: search,
+                                        path: ["title", "description", "level"],
+                                        fuzzy: { maxEdits: 1 }
+                                    }
+                                },
+                                // Spread the individual teacher clauses into the should array
+                                ...teacherSearchClauses
+                            ],
+                            minimumShouldMatch: 1
+                        }
+                    }
+                });
+            }
+
+            // 3. Add standard lookup / projection / pagination stages to the pipeline
+            pipeline.push(
+                {
+                    $lookup: {
+                        from: "users", // Adjust this if your actual collection name is different (e.g., "teachers")
+                        localField: "teacherId",
+                        foreignField: "_id",
+                        as: "teacherId",
+                        pipeline: [
+                            {
+                                $project: {
+                                    _id: 1,
+                                    name: 1,
+                                    email: 1
+                                }
+                            }
+                        ]
+                    }
+                }, 
+                { $sort: search ? { score: { $meta: "searchScore" } } : { createdAt: -1 } },
+                {
+                    $facet: {
+                        metadata: [{ $count: "total" }],
+                        data: [{ $skip: skipValues }, { $limit: limit }]
+                    }
+                }
+            );
+
+            // 4. Execute Pipeline
+            const aggregationResult = await Course.aggregate(pipeline);
+
+            let courses = aggregationResult[0]?.data || [];
+            const totalCourses = aggregationResult[0]?.metadata[0]?.total || 0;
+
+            // 5. Manually decrypt the clean teacher emails
+            courses = courses.map(course => {
+                if (course.teacherId && Array.isArray(course.teacherId)) {
+                    course.teacherId = course.teacherId.map(teacher => {
+                        if (teacher.email) {
+                            teacher.email = teacher.email.includes("@") 
+                                ? teacher.email 
+                                : decryptEmail(teacher.email);
+                        }
+                        return teacher;
+                    });
+                }
+                return course;
+            });
+
+            // 6. Structure the Response
+            const result = {
+                success: true,
+                pagination: {
+                    totalItem: totalCourses,
+                    currentPage: page,
+                    totalPages: Math.ceil(totalCourses / limit),
+                    ItemsPerPage: limit
+                },
+                courses: courses
+            };
+
             await setRedisCache(cacheKey, result, 300);
             return result;
-        } catch (err){
+        } catch (err) {
             err.statusCode = err.statusCode || 500;
-            err.message = err.message || "failed to get courses data !";
+            err.message = err.message || "Failed to get the courses data!";
             throw err;
         }
     }

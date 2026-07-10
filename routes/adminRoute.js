@@ -14,7 +14,7 @@ router.route("/logout").post(logout);
 router.route("/me").get(getDataById);
 
 router.route("/add-user").post(authorizeRoles("admin"), addUser); 
-router.route("/users").get(authorizeRoles("admin"), listUsers);
+router.route("/users").get(listUsers);
 
 router.route("/users/:id")
     .get(getDataById) 
